@@ -126,6 +126,10 @@ add_executable(openarm-can-demo examples/demo.cpp)
 target_link_libraries(openarm-can-demo openarm_can)
 install(TARGETS openarm-can-demo DESTINATION ${CMAKE_INSTALL_BINDIR})
 
+add_executable(openarm-can-sampling-time examples/sampling_time.cpp)
+target_link_libraries(openarm-can-sampling-time openarm_can)
+install(TARGETS openarm-can-sampling-time DESTINATION ${CMAKE_INSTALL_BINDIR})
+
 # Install scripts
 install(
   PROGRAMS setup/openarm-can-change-baudrate
@@ -133,6 +137,7 @@ install(
            setup/openarm-can-configure-socketcan-4-arms
            setup/openarm-can-set-zero
            setup/openarm-can-zero-position-calibration
+           setup/openarm-can-sampling-time
   DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 # Add tests
