@@ -117,6 +117,11 @@ add_executable(openarm-can-motor-check setup/motor_check.cpp)
 target_link_libraries(openarm-can-motor-check openarm_can)
 install(TARGETS openarm-can-motor-check DESTINATION ${CMAKE_INSTALL_BINDIR})
 
+add_executable(openarm-can-motor-sampling-check setup/motor_sampling_check.cpp)
+target_link_libraries(openarm-can-motor-sampling-check openarm_can)
+install(TARGETS openarm-can-motor-sampling-check
+        DESTINATION ${CMAKE_INSTALL_BINDIR})
+
 add_executable(openarm-can-diagnosis setup/openarm_can_diagnosis.cpp)
 target_link_libraries(openarm-can-diagnosis openarm_can)
 install(TARGETS openarm-can-diagnosis DESTINATION ${CMAKE_INSTALL_BINDIR})
