@@ -63,8 +63,12 @@ void print_progress(int current, int total, const std::string& info) {
     std::cout << "] " << int(progress * 100.0) << "% | " << info << std::flush;
 }
 
-// Helper: Reconfigure CAN interface baudrate
+// Helper: Reconfigure CAN interface baudrate and flush bus
 bool reconfigure_can_interface(const std::string& iface, int br, int dbr) {
+    // Bring down first to flush any pending frames
+    (void)system(("sudo ip link set " + iface + " down 2>/dev/null").c_str());
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
     std::string cmd = "sudo ip link set " + iface + " type can bitrate " + std::to_string(br) +
                       " sample-point 0.75";
 
@@ -73,7 +77,6 @@ bool reconfigure_can_interface(const std::string& iface, int br, int dbr) {
     }
     cmd += " restart-ms 100 2>/dev/null";
 
-    (void)system(("sudo ip link set " + iface + " down 2>/dev/null").c_str());
     int res = system(cmd.c_str());
     (void)system(("sudo ip link set " + iface + " up 2>/dev/null").c_str());
 
@@ -98,7 +101,7 @@ int run_discover(const std::string& interface, int max_id, bool full_scan) {
     std::cout << " Mode: " << (full_scan ? "Full scan (12 baudrates)" : "Fast scan (1M/5M/8M/10M)")
               << "\n";
     std::cout << " [Timing] SP: 0.75 / DSP: 0.60 / DSJW: 1\n";
-    std::cout << " Scanning Range: 0x01 to " << format_hex_id(max_id) << "\n";
+    std::cout << " Scanning Range: 0x01 to " << format_hex_id(max_id) << " (" << max_id << ")\n";
     std::cout << "=========================================================\n\n";
 
     for (int bi = 0; bi < total_bauds; ++bi) {
@@ -108,43 +111,42 @@ int run_discover(const std::string& interface, int max_id, bool full_scan) {
 
         if (!reconfigure_can_interface(interface, setting.bitrate, setting.dbitrate)) continue;
 
-        // Wait for interface to stabilize
-        std::this_thread::sleep_for(std::chrono::milliseconds(300));
+        // Wait for interface to stabilize after reconfiguration
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
         for (int id = 1; id <= max_id; ++id) {
-            uint32_t recv_candidates[2] = {(uint32_t)(id + 0x10), 0x00};
+            // Only scan standard recv ID (send_id + 0x10)
+            uint32_t recv_id = (uint32_t)(id + 0x10);
 
-            for (uint32_t rid : recv_candidates) {
-                try {
-                    openarm::can::socket::OpenArm openarm(interface,
-                                                          (setting.bitrate != setting.dbitrate));
+            try {
+                openarm::can::socket::OpenArm openarm(interface,
+                                                      (setting.bitrate != setting.dbitrate));
 
-                    openarm.init_arm_motors({openarm::damiao_motor::MotorType::DM4310},
-                                            {(uint32_t)id}, {rid});
-                    openarm.set_callback_mode_all(openarm::damiao_motor::CallbackMode::PARAM);
+                openarm.init_arm_motors({openarm::damiao_motor::MotorType::DM4310}, {(uint32_t)id},
+                                        {recv_id});
+                openarm.set_callback_mode_all(openarm::damiao_motor::CallbackMode::PARAM);
 
-                    bool detected = false;
-                    for (int retry = 0; retry < 2; ++retry) {
-                        openarm.get_arm().query_param_all((int)openarm::damiao_motor::RID::MST_ID);
+                bool detected = false;
+                for (int retry = 0; retry < 3; ++retry) {
+                    openarm.get_arm().query_param_all((int)openarm::damiao_motor::RID::MST_ID);
 
-                        for (int k = 0; k < 2; ++k) {
-                            std::this_thread::sleep_for(std::chrono::milliseconds(15));
-                            openarm.recv_all();
-                        }
-
-                        double val = openarm.get_arm().get_motor(0).get_param(
-                            (int)openarm::damiao_motor::RID::MST_ID);
-                        if (std::isfinite(val) && val != -1.0) {
-                            detected = true;
-                            break;
-                        }
+                    for (int k = 0; k < 3; ++k) {
+                        std::this_thread::sleep_for(std::chrono::milliseconds(30));
+                        openarm.recv_all();
                     }
 
-                    if (detected) {
-                        found_motors.insert({(uint32_t)id, rid, b, setting.label});
+                    double val = openarm.get_arm().get_motor(0).get_param(
+                        (int)openarm::damiao_motor::RID::MST_ID);
+                    if (std::isfinite(val) && val != -1.0) {
+                        detected = true;
+                        break;
                     }
-                } catch (...) {
                 }
+
+                if (detected) {
+                    found_motors.insert({(uint32_t)id, recv_id, b, setting.label});
+                }
+            } catch (...) {
             }
         }
     }
@@ -167,13 +169,15 @@ int run_discover(const std::string& interface, int max_id, bool full_scan) {
                       << ")\n";
         }
         std::cout << "=========================================================\n";
-
-        std::cout << "=========================================================\n";
-        std::cout << "⚠️  WARNING: CAN interface is now configured at 10 Mbps (FD).\n";
-        std::cout << "   Run 'can_configure' to restore the baudrate for your motors.\n";
-        std::cout << "   e.g. openarm-can -i " << interface << " can_configure\n";
-        std::cout << "=========================================================\n";
     }
+
+    // Warn that interface baudrate has changed
+    std::cout << "=========================================================\n";
+    std::cout << "⚠️  WARNING: CAN interface is now configured at 10 Mbps (FD).\n";
+    std::cout << "   Run 'can_configure' to restore the baudrate for your motors.\n";
+    std::cout << "   e.g. openarm-can-cli -i " << interface << " can_configure\n";
+    std::cout << "=========================================================\n";
+
     return 0;
 }
 

@@ -11,7 +11,6 @@
 namespace openarm::cli {
 
 int run_change_baud(const std::string& interface, int baudrate, int canid, bool flash) {
-    // Mapping of baudrate values to DaMiao register codes
     static const std::map<int, uint8_t> BAUDRATE_MAP = {
         {125000, 0},  {200000, 1},  {250000, 2},  {500000, 3},  {1000000, 4},  {2000000, 5},
         {2500000, 6}, {3200000, 7}, {4000000, 8}, {5000000, 9}, {8000000, 10}, {10000000, 11}};
@@ -32,7 +31,7 @@ int run_change_baud(const std::string& interface, int baudrate, int canid, bool 
                   << std::endl;
 
         struct can_frame frame;
-        frame.can_id = 0x7FF;  // System Configuration ID
+        frame.can_id = 0x7FF;
         frame.can_dlc = 8;
         frame.data[0] = canid & 0xFF;
         frame.data[1] = (canid >> 8) & 0xFF;
@@ -45,7 +44,7 @@ int run_change_baud(const std::string& interface, int baudrate, int canid, bool 
             std::cerr << "✗ Error: Failed to write CAN frame." << std::endl;
             return 1;
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
         // --- Step 2: Flash Save Operation ---
         if (flash) {
@@ -65,9 +64,9 @@ int run_change_baud(const std::string& interface, int baudrate, int canid, bool 
             dis.can_id = canid;
             dis.can_dlc = 8;
             for (int i = 0; i < 7; i++) dis.data[i] = 0xFF;
-            dis.data[7] = 0xFD;  // Disable command
+            dis.data[7] = 0xFD;
             socket.write_can_frame(dis);
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
             // B. Send Save Command
             struct can_frame sv;
@@ -79,7 +78,7 @@ int run_change_baud(const std::string& interface, int baudrate, int canid, bool 
             for (int i = 3; i < 8; i++) sv.data[i] = 0x00;
 
             if (socket.write_can_frame(sv)) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(40));
+                std::this_thread::sleep_for(std::chrono::milliseconds(200));
                 std::cout << "✓ Parameters saved to Flash successfully." << std::endl;
             }
         }
